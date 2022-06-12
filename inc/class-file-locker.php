@@ -78,13 +78,21 @@ class FileLocker {
 		return $error_array;
 	}
 
+	private function check_if_file_in_directory( $file_path ) {
+		if ( strpos( $file_path, $this->filelocker_dir ) === false ) {
+			return false;
+		}
+
+		return true;
+	}
+
 	public function view_download_file() {
 		$filename = $_GET['filelocker'];
 
 		if ( $filename ) {
-			$content_type = $this->correct_type_header( $filename );
+			if ( $this->access_conditions() && $this->check_if_file_in_directory( $filename ) ) {
+				$content_type = $this->correct_type_header( $filename );
 
-			if ( $this->access_conditions() ) {
 				if ( file_exists( $filename ) ) {
 					header( 'Content-Description: File Transfer' );
 					header( 'Content-Type: ' . $content_type );
