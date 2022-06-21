@@ -62,7 +62,7 @@ class FileLocker {
 		}
 
 		if ( 'nginx' === $this->server_status ) {
-			$error_array[] = 'Your server is running with <strong>nginx</strong>. This means you need to perform additional steps for it to work. 
+			$error_array[] = 'Your server is running with <strong>nginx</strong>. This means you need to perform additional steps for it to work.
 			Find your nginx .conf file and paste below within <code>location / {...}</code> rule: <br><br><code>if ($request_filename ~ uploads/filelocker/.+){<br>
             &nbsp;&nbsp;rewrite ^(.*)$ $scheme://$host/?filelocker=$request_filename redirect;<br>}</code>';
 		}
@@ -79,7 +79,7 @@ class FileLocker {
 	}
 
 	private function check_if_file_in_directory( $file_path ) {
-		if ( strpos( $file_path, $this->filelocker_dir ) === false ) {
+		if ( strpos( \wp_normalize_path( realpath( $file_path ) ), $this->filelocker_dir ) === false ) {
 			return false;
 		}
 
@@ -90,20 +90,18 @@ class FileLocker {
 		$filename = $_GET['filelocker'];
 
 		if ( $filename ) {
-			if ( $this->access_conditions() && $this->check_if_file_in_directory( $filename ) ) {
+			if ( file_exists( $filename ) && $this->access_conditions() && $this->check_if_file_in_directory( $filename ) ) {
 				$content_type = $this->correct_type_header( $filename );
 
-				if ( file_exists( $filename ) ) {
-					header( 'Content-Description: File Transfer' );
-					header( 'Content-Type: ' . $content_type );
-					header( 'Content-Disposition: inline; filename="' . basename( $filename ) . '"' );
-					header( 'Expires: 0' );
-					header( 'Cache-Control: must-revalidate' );
-					header( 'Pragma: public' );
-					header( 'Content-Length: ' . filesize( $filename ) );
-					readfile( $filename );
-					exit;
-				}
+				header( 'Content-Description: File Transfer' );
+				header( 'Content-Type: ' . $content_type );
+				header( 'Content-Disposition: inline; filename="' . basename( $filename ) . '"' );
+				header( 'Expires: 0' );
+				header( 'Cache-Control: must-revalidate' );
+				header( 'Pragma: public' );
+				header( 'Content-Length: ' . filesize( $filename ) );
+				readfile( $filename );
+				exit;
 			} else {
 				if ( function_exists( 'filelocker_redirect' ) ) {
 					$redirect_url = filelocker_redirect();
@@ -148,7 +146,7 @@ class FileLocker {
 
 
 	public function filelocker_directory_exists(): bool {
-		$this->filelocker_dir = $this->uploads_dir . '/filelocker';
+		$this->filelocker_dir = \wp_normalize_path( $this->uploads_dir . '/filelocker' );
 
 		return file_exists( $this->filelocker_dir );
 	}
