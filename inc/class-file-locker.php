@@ -120,24 +120,27 @@ class FileLocker {
 
 	private function correct_type_header( string $filename ): string {
 		$path_parts     = pathinfo( $filename );
-		$path_extension = $path_parts['extension'];
 
-		$image_array = array(
-			'jpg',
-			'jpeg',
-			'png',
-			'svg',
-			'gif',
-			'tiff',
-		);
+        if ( isset( $path_parts['extension'] ) ) {
+            $path_extension = $path_parts['extension'];
 
-		if ( 'pdf' === $path_extension ) {
-			return 'Content-Type: application/pdf';
-		} elseif ( in_array( $path_extension, $image_array, true ) ) {
-			return 'Content-Type: image/' . $path_extension;
-		} else {
-			return 'Content-Type: application/octet-stream';
-		}
+            $image_array = array(
+                'jpg',
+                'jpeg',
+                'png',
+                'svg',
+                'gif',
+                'tiff',
+            );
+
+            if ( 'pdf' === $path_extension ) {
+                return 'Content-Type: application/pdf';
+            } elseif ( in_array( $path_extension, $image_array, true ) ) {
+                return 'Content-Type: image/' . $path_extension;
+            }
+        }
+
+        return 'Content-Type: application/octet-stream';
 	}
 
 	public function get_uploads_path(): string {
