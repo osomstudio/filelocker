@@ -158,7 +158,13 @@ class FileLocker {
 
 	public function create_filelocker_directory(): bool {
 		if ( $this->filelocker_directory_exists() === false ) {
-			mkdir( $this->filelocker_dir );
+			$create_filelocker_dir = mkdir( $this->filelocker_dir );
+
+			if ( false === $create_filelocker_dir ) {
+				echo 'Change uploads directory permissions or disable File Locker plugin.';
+				die();
+			}
+
 			return true;
 		}
 		return false;
