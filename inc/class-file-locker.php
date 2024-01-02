@@ -86,33 +86,36 @@ class FileLocker {
 		return true;
 	}
 
-	public function view_download_file() {
-		$filename = $_GET['filelocker'];
+	public function view_download_file()
+    {
+        if ( isset( $_GET['filelocker'] ) ) {
+            $filename = $_GET['filelocker'];
 
-		if ( $filename ) {
-			if ( file_exists( $filename ) && $this->access_conditions() && $this->check_if_file_in_directory( $filename ) ) {
-				$content_type = $this->correct_type_header( $filename );
+            if ($filename) {
+                if (file_exists($filename) && $this->access_conditions() && $this->check_if_file_in_directory($filename)) {
+                    $content_type = $this->correct_type_header($filename);
 
-				header( 'Content-Description: File Transfer' );
-				header( 'Content-Type: ' . $content_type );
-				header( 'Content-Disposition: inline; filename="' . basename( $filename ) . '"' );
-				header( 'Expires: 0' );
-				header( 'Cache-Control: must-revalidate' );
-				header( 'Pragma: public' );
-				header( 'Content-Length: ' . filesize( $filename ) );
-				readfile( $filename );
-				exit;
-			} else {
-				if ( function_exists( 'filelocker_redirect' ) ) {
-					$redirect_url = filelocker_redirect();
-				} else {
-					$redirect_url = $this->home_url;
-				}
+                    header('Content-Description: File Transfer');
+                    header('Content-Type: ' . $content_type);
+                    header('Content-Disposition: inline; filename="' . basename($filename) . '"');
+                    header('Expires: 0');
+                    header('Cache-Control: must-revalidate');
+                    header('Pragma: public');
+                    header('Content-Length: ' . filesize($filename));
+                    readfile($filename);
+                    exit;
+                } else {
+                    if (function_exists('filelocker_redirect')) {
+                        $redirect_url = filelocker_redirect();
+                    } else {
+                        $redirect_url = $this->home_url;
+                    }
 
-				header( 'Location: ' . $redirect_url );
-				die;
-			}
-		}
+                    header('Location: ' . $redirect_url);
+                    die;
+                }
+            }
+        }
 	}
 
 	private function correct_type_header( string $filename ): string {
@@ -215,13 +218,16 @@ class FileLocker {
 
 	public function file_handler() {
 		$target_dir  = $this->filelocker_dir;
-		$target_file = $target_dir . '/' . basename( $_FILES['fileLockerFile']['name'] );
 
-		if ( isset( $_POST['submitFileLocker'] ) && current_user_can( 'manage_options' ) ) {
-			$file_tmp = $_FILES['fileLockerFile']['tmp_name'];
+        if ( isset ( $_FILES['fileLockerFile'] ) ) {
+            $target_file = $target_dir . '/' . basename( $_FILES['fileLockerFile']['name'] );
 
-			move_uploaded_file( $file_tmp, $target_file );
-		}
+            if ( isset( $_POST['submitFileLocker'] ) && current_user_can( 'manage_options' ) ) {
+                $file_tmp = $_FILES['fileLockerFile']['tmp_name'];
+
+                move_uploaded_file( $file_tmp, $target_file );
+            }
+        }
 	}
 
 	public function delete_filelocker_file() {
