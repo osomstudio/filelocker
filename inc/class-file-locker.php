@@ -214,12 +214,23 @@ class FileLocker {
 
 		foreach ( $all_files as $single_file ) {
 			if ( in_array( $single_file, $array_to_omit, true ) === false ) {
+				$file_path = $this->filelocker_dir . '/' . $single_file;
+
+				// Only include files, not directories
+				if ( is_file( $file_path ) ) {
 				$file_array['url'] = $this->filelocker_url . $single_file;
-				$file_array['dir'] = $this->filelocker_dir . '/' . $single_file;
+					$file_array['dir'] = $file_path;
+					$file_array['mtime'] = filemtime( $file_path );
 
 				$files_array[] = $file_array;
 			}
 		}
+		}
+
+		// Sort by modification time descending (most recent first)
+		usort( $files_array, function( $a, $b ) {
+			return $b['mtime'] - $a['mtime'];
+		});
 
 		return $files_array;
 	}
@@ -228,7 +239,22 @@ class FileLocker {
 		$target_dir = $this->filelocker_dir;
 
 		if ( isset( $_FILES['fileLockerFile'] ) ) {
-			$target_file = $target_dir . '/' . basename( $_FILES['fileLockerFile']['name'] );
+			$original_filename = basename( $_FILES['fileLockerFile']['name'] );
+			$target_file = $target_dir . '/' . $original_filename;
+
+			// Handle duplicate filenames by adding a suffix
+			if ( file_exists( $target_file ) ) {
+				$pathinfo = pathinfo( $original_filename );
+				$filename = $pathinfo['filename'];
+				$extension = isset( $pathinfo['extension'] ) ? '.' . $pathinfo['extension'] : '';
+				$counter = 1;
+
+				do {
+					$new_filename = $filename . '_' . $counter . $extension;
+					$target_file = $target_dir . '/' . $new_filename;
+					$counter++;
+				} while ( file_exists( $target_file ) );
+			}
 
 			if ( isset( $_POST['submitFileLocker'] ) && current_user_can( 'manage_options' ) ) {
 				$file_tmp = $_FILES['fileLockerFile']['tmp_name'];
