@@ -240,11 +240,15 @@ class FileLocker {
 
 		if ( isset( $_FILES['fileLockerFile'] ) ) {
 			$original_filename = basename( $_FILES['fileLockerFile']['name'] );
-			$target_file = $target_dir . '/' . $original_filename;
+
+			// Sanitize filename using WordPress function
+			$sanitized_filename = sanitize_file_name( $original_filename );
+
+			$target_file = $target_dir . '/' . $sanitized_filename;
 
 			// Handle duplicate filenames by adding a suffix
 			if ( file_exists( $target_file ) ) {
-				$pathinfo = pathinfo( $original_filename );
+				$pathinfo = pathinfo( $sanitized_filename );
 				$filename = $pathinfo['filename'];
 				$extension = isset( $pathinfo['extension'] ) ? '.' . $pathinfo['extension'] : '';
 				$counter = 1;
