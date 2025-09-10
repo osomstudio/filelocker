@@ -218,12 +218,14 @@ class FileLocker {
 
 				// Only include files, not directories
 				if ( is_file( $file_path ) ) {
-				$file_array['url'] = $this->filelocker_url . $single_file;
+					$file_array['url'] = $this->filelocker_url . $single_file;
 					$file_array['dir'] = $file_path;
-					$file_array['mtime'] = filemtime( $file_path );
+					
+					$mtime = filemtime( $file_path );
+					$file_array['mtime'] = $mtime !== false ? $mtime : 0;
 
-				$files_array[] = $file_array;
-			}
+					$files_array[] = $file_array;
+				}
 		}
 		}
 
