@@ -259,7 +259,9 @@ class FileLocker {
 				do {
 					$new_filename = $filename . '_' . $counter . $extension;
 					$target_file = $target_dir . '/' . $new_filename;
-					$counter++;
+					if ( file_exists( $target_file ) ) {
+						$counter++;
+					}
 				} while ( file_exists( $target_file ) && $counter <= $max_attempts );
 
 				// If we've exceeded the maximum attempts, fall back to timestamp-based naming
