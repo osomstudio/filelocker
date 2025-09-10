@@ -254,12 +254,20 @@ class FileLocker {
 				$filename = $pathinfo['filename'];
 				$extension = isset( $pathinfo['extension'] ) ? '.' . $pathinfo['extension'] : '';
 				$counter = 1;
+				$max_attempts = 1000;
 
 				do {
 					$new_filename = $filename . '_' . $counter . $extension;
 					$target_file = $target_dir . '/' . $new_filename;
 					$counter++;
-				} while ( file_exists( $target_file ) );
+				} while ( file_exists( $target_file ) && $counter <= $max_attempts );
+
+				// If we've exceeded the maximum attempts, fall back to timestamp-based naming
+				if ( $counter > $max_attempts ) {
+					$timestamp = time();
+					$new_filename = $filename . '_' . $timestamp . $extension;
+					$target_file = $target_dir . '/' . $new_filename;
+				}
 			}
 
 			if ( isset( $_POST['submitFileLocker'] ) && current_user_can( 'manage_options' ) ) {
