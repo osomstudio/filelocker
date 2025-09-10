@@ -231,7 +231,7 @@ class FileLocker {
 
 		// Sort by modification time descending (most recent first)
 		usort( $files_array, function( $a, $b ) {
-			return $b['mtime'] - $a['mtime'];
+			return $b['mtime'] <=> $a['mtime'];
 		});
 
 		return $files_array;
