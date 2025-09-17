@@ -78,13 +78,14 @@ function filelocker_menu_page() {
 		<h2 class="filelocker-section-title">Upload Restricted File</h2>
 		<div class="filelocker-upload-section">
 			<form action="<?php echo $filelocker_admin_url; ?>" method="post" enctype="multipart/form-data" class="filelocker-upload-form">
+				<?php wp_nonce_field( 'filelocker_upload_action', 'filelocker_upload_nonce' ); ?>
 				<div class="filelocker-drop-zone" id="filelockerDropZone">
 					<div class="drop-zone-content">
 						<div class="drop-zone-icon">📁</div>
 						<p class="drop-zone-text">Drag & drop your file here or <button type="button" class="drop-zone-browse">browse files</button></p>
 						<p class="drop-zone-selected" id="selectedFileName" style="display: none;"></p>
 					</div>
-					<input type="file" name="fileLockerFile" id="fileLockerFile" class="filelocker-file-input" style="display: none;">
+					<input type="file" name="fileLockerFile" id="fileLockerFile" class="filelocker-file-input" accept="*/*" style="display: none;">
 				</div>
 				<div class="upload-actions">
 					<input type="submit" value="Upload File" name="submitFileLocker" class="button button-primary filelocker-upload-btn" id="uploadButton" disabled>

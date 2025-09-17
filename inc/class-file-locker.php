@@ -286,6 +286,11 @@ class FileLocker {
 			}
 
 			if ( isset( $_POST['submitFileLocker'] ) && current_user_can( 'manage_options' ) ) {
+				// Verify nonce for security
+				if ( ! isset( $_POST['filelocker_upload_nonce'] ) || ! wp_verify_nonce( $_POST['filelocker_upload_nonce'], 'filelocker_upload_action' ) ) {
+					return;
+				}
+
 				$file_tmp = $_FILES['fileLockerFile']['tmp_name'];
 
 				move_uploaded_file( $file_tmp, $target_file );
