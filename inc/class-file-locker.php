@@ -61,10 +61,12 @@ class FileLocker {
 			$error_array[] = 'Current version of "FileLocker Plugin" works only for Apache or Nginx. Your server is using "' . $_SERVER['SERVER_SOFTWARE'] . '".';
 		}
 
-		if ( 'nginx' === $this->server_status ) {
+		if ( 'nginx' === $this->server_status && ! get_option( 'filelocker_nginx_warning_shown' ) ) {
 			$error_array[] = 'Your server is running with <strong>nginx</strong>. This means you need to perform additional steps for it to work.
 			Find your nginx .conf file and paste below within <code>location / {...}</code> rule: <br><br><code>if ($request_filename ~ uploads/filelocker/.+){<br>
             &nbsp;&nbsp;rewrite ^(.*)$ $scheme://$host/?filelocker=$request_filename redirect;<br>}</code>';
+
+			update_option( 'filelocker_nginx_warning_shown', true );
 		}
 
 		if ( false === $this->check_if_filelocker_directory_exists() ) {
@@ -204,35 +206,56 @@ class FileLocker {
 	}
 
 	public function list_all_restricted_files(): array {
-		$all_files     = scandir( $this->filelocker_dir );
-		$files_array   = array();
-		$array_to_omit = array(
-			'.htaccess',
-			'.',
-			'..',
-		);
-
-		foreach ( $all_files as $single_file ) {
-			if ( in_array( $single_file, $array_to_omit, true ) === false ) {
-				$file_path = $this->filelocker_dir . '/' . $single_file;
-
-				// Only include files, not directories
-				if ( is_file( $file_path ) ) {
-					$file_array['url'] = $this->filelocker_url . $single_file;
-					$file_array['dir'] = $file_path;
-					
-					$mtime = filemtime( $file_path );
-					$file_array['mtime'] = $mtime !== false ? $mtime : 0;
-
-					$files_array[] = $file_array;
-				}
-		}
-		}
+		$files_array = $this->scan_directory_recursive( $this->filelocker_dir );
 
 		// Sort by modification time descending (most recent first)
 		usort( $files_array, function( $a, $b ) {
-			return $b['mtime'] <=> $a['mtime'];
+			return $b['mtime'] - $a['mtime'];
 		});
+
+		return $files_array;
+	}
+
+	private function scan_directory_recursive( string $directory ): array {
+		$files_array   = array();
+		$files_to_omit = array(
+			'.',
+			'..',
+		);
+		$extensions_to_omit = array(
+			'php',
+			'htaccess',
+		);
+
+		$all_files = scandir( $directory );
+
+		foreach ( $all_files as $single_file ) {
+			if ( in_array( $single_file, $files_to_omit, true ) === false ) {
+				$file_path = $directory . '/' . $single_file;
+
+				if ( is_file( $file_path ) ) {
+					// Skip files by extension or specific filenames
+					$file_extension = pathinfo( $single_file, PATHINFO_EXTENSION );
+					if ( in_array( strtolower( $file_extension ), $extensions_to_omit, true ) ||
+						 in_array( $single_file, array( '.htaccess' ), true ) ) {
+						continue;
+					}
+
+					// Calculate relative path from filelocker_dir for URL
+					$relative_path = str_replace( $this->filelocker_dir . '/', '', $file_path );
+
+					$file_array['url'] = $this->filelocker_url . $relative_path;
+					$file_array['dir'] = $file_path;
+					$file_array['mtime'] = filemtime( $file_path );
+
+					$files_array[] = $file_array;
+				} elseif ( is_dir( $file_path ) ) {
+					// Recursively scan subdirectories
+					$subdirectory_files = $this->scan_directory_recursive( $file_path );
+					$files_array = array_merge( $files_array, $subdirectory_files );
+				}
+		}
+		}
 
 		return $files_array;
 	}
@@ -281,16 +304,41 @@ class FileLocker {
 	}
 
 	public function delete_filelocker_file() {
-		if ( false === current_user_can( 'administrator' ) ) {
-			return false;
+		if ( false === current_user_can( 'manage_options' ) ) {
+			return array( 'success' => false, 'error' => 'Insufficient permissions. Manage options capability required.' );
 		}
 
-		if ( isset( $_GET['filelocker_name'] ) ) {
+		if ( ! isset( $_GET['filelocker_name'] ) ) {
+			return array( 'success' => false, 'error' => 'No file specified for deletion.' );
+		}
+
 			$filelocker_name = $_GET['filelocker_name'];
-			return unlink( $filelocker_name );
+
+		if ( ! file_exists( $filelocker_name ) ) {
+			return array( 'success' => false, 'error' => 'File not found: ' . basename( $filelocker_name ) );
 		}
 
-		return false;
+		if ( ! $this->check_if_file_in_directory( $filelocker_name ) ) {
+			return array( 'success' => false, 'error' => 'File is not in the secure directory.' );
+		}
+
+		if ( ! is_writable( dirname( $filelocker_name ) ) ) {
+			return array( 'success' => false, 'error' => 'Directory is not writable. Check file permissions.' );
+		}
+
+		if ( ! is_writable( $filelocker_name ) ) {
+			return array( 'success' => false, 'error' => 'File is not writable. Check file permissions.' );
+		}
+
+		$result = unlink( $filelocker_name );
+
+		if ( $result ) {
+			return array( 'success' => true );
+		} else {
+			$error = error_get_last();
+			$error_message = $error ? $error['message'] : 'Unknown error occurred during file deletion.';
+			return array( 'success' => false, 'error' => $error_message );
+		}
 	}
 
 	public function is_filelocker_file_restricted( string $file_url ): bool {
