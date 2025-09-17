@@ -48,6 +48,7 @@ function filelocker_menu_page() {
         <h2 class="filelocker-section-title">Upload Restricted File</h2>
         <div class="filelocker-upload-section">
             <form action="<?php echo $filelocker_admin_url; ?>" method="post" enctype="multipart/form-data" class="filelocker-upload-form">
+                <?php wp_nonce_field( 'filelocker_upload_action', 'filelocker_upload_nonce' ); ?>
                 <div class="filelocker-drop-zone" id="filelockerDropZone">
                     <div class="drop-zone-content">
                         <div class="drop-zone-icon">📁</div>
@@ -312,7 +313,11 @@ function filelocker_menu_page() {
                     <tbody>
                     <?php
                     foreach ( $all_files as $single_file ) {
-                        $delete_file_parameter = $filelocker_admin_url . '&delete_filelocker=true&filelocker_name=' . $single_file['dir'];
+                        $delete_url = add_query_arg( array(
+                            'delete_filelocker' => 'true',
+                            'filelocker_name' => $single_file['dir']
+                        ), $filelocker_admin_url );
+                        $delete_file_parameter = wp_nonce_url( $delete_url, 'delete_filelocker_' . basename( $single_file['dir'] ) );
                         $file_name = basename( $single_file['dir'] );
                         $upload_date = date( 'Y-m-d H:i:s', $single_file['mtime'] );
                         ?>
@@ -372,6 +377,18 @@ function filelocker_delete_failure( $error_message = '' ) {
 
 function delete_filelocker_restricted_file() {
     if ( isset( $_GET['delete_filelocker'] ) && $_GET['delete_filelocker'] === 'true' ) {
+        // Verify nonce for CSRF protection
+        if ( ! isset( $_GET['filelocker_name'] ) ) {
+            wp_die( 'Invalid request: No file specified.', 'Security Error', array( 'response' => 400 ) );
+        }
+        
+        $filename = basename( $_GET['filelocker_name'] );
+        $nonce_action = 'delete_filelocker_' . $filename;
+        
+        if ( ! isset( $_REQUEST['_wpnonce'] ) || ! wp_verify_nonce( $_REQUEST['_wpnonce'], $nonce_action ) ) {
+            wp_die( 'Security check failed. Please try again.', 'Security Error', array( 'response' => 403 ) );
+        }
+
         $filelocker = new FileLocker();
 
         $delete_result = $filelocker->delete_filelocker_file();
