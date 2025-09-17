@@ -263,12 +263,60 @@ class FileLocker {
 	public function file_handler() {
 		$target_dir = $this->filelocker_dir;
 
-		if ( isset( $_FILES['fileLockerFile'] ) ) {
+		if ( isset( $_POST['submitFileLocker'] ) && current_user_can( 'manage_options' ) ) {
+			// Verify nonce for security
+			if ( ! isset( $_POST['filelocker_upload_nonce'] ) || ! wp_verify_nonce( $_POST['filelocker_upload_nonce'], 'filelocker_upload_action' ) ) {
+				$this->add_upload_error( 'Security verification failed. Please try again.' );
+				return;
+			}
+
+			// Check if file was uploaded
+			if ( ! isset( $_FILES['fileLockerFile'] ) || empty( $_FILES['fileLockerFile']['name'] ) ) {
+				$this->add_upload_error( 'No file was selected for upload.' );
+				return;
+			}
+
+			// Validate upload error status
+			if ( $_FILES['fileLockerFile']['error'] !== UPLOAD_ERR_OK ) {
+				$error_message = $this->get_upload_error_message( $_FILES['fileLockerFile']['error'] );
+				$this->add_upload_error( $error_message );
+				return;
+			}
+
+			// Enforce max file size (use WordPress upload limit)
+			$wp_max_file_size = wp_max_upload_size();
+			$max_file_size = apply_filters( 'filelocker_max_file_size', $wp_max_file_size );
+			if ( $_FILES['fileLockerFile']['size'] > $max_file_size ) {
+				$max_size_mb = round( $max_file_size / ( 1024 * 1024 ), 1 );
+				$this->add_upload_error( "File too large. Maximum allowed size is {$max_size_mb}MB." );
+				return;
+			}
+
 			$original_filename = basename( $_FILES['fileLockerFile']['name'] );
 			
 			// Sanitize filename using WordPress function
 			$sanitized_filename = sanitize_file_name( $original_filename );
 			
+			if ( empty( $sanitized_filename ) ) {
+				$this->add_upload_error( 'Invalid filename. Please rename your file and try again.' );
+				return;
+			}
+
+			// Validate file type and mime type
+			$file_type_check = wp_check_filetype_and_ext( $_FILES['fileLockerFile']['tmp_name'], $sanitized_filename );
+			
+			if ( ! $file_type_check['type'] || ! $file_type_check['ext'] ) {
+				$this->add_upload_error( 'File type not allowed. Please upload a valid file.' );
+				return;
+			}
+
+			// Additional security: check against WordPress allowed mime types
+			$allowed_mimes = get_allowed_mime_types();
+			if ( ! in_array( $file_type_check['type'], $allowed_mimes ) ) {
+				$this->add_upload_error( 'File type not permitted by WordPress security settings.' );
+				return;
+			}
+
 			$target_file = $target_dir . '/' . $sanitized_filename;
 
 			// Handle duplicate filenames by adding a suffix
@@ -285,17 +333,73 @@ class FileLocker {
 				} while ( file_exists( $target_file ) );
 			}
 
-			if ( isset( $_POST['submitFileLocker'] ) && current_user_can( 'manage_options' ) ) {
-				// Verify nonce for security
-				if ( ! isset( $_POST['filelocker_upload_nonce'] ) || ! wp_verify_nonce( $_POST['filelocker_upload_nonce'], 'filelocker_upload_action' ) ) {
-					return;
-				}
-
-				$file_tmp = $_FILES['fileLockerFile']['tmp_name'];
-
-				move_uploaded_file( $file_tmp, $target_file );
+			// Perform the file upload with proper error checking
+			$file_tmp = $_FILES['fileLockerFile']['tmp_name'];
+			
+			// Verify the temporary file exists and is readable
+			if ( ! is_uploaded_file( $file_tmp ) ) {
+				$this->add_upload_error( 'Invalid upload. Please try again.' );
+				error_log( 'FileLocker: Invalid uploaded file detected for ' . $original_filename );
+				return;
 			}
+
+			// Attempt to move the uploaded file
+			if ( ! move_uploaded_file( $file_tmp, $target_file ) ) {
+				$this->add_upload_error( 'Failed to save file. Please check directory permissions.' );
+				error_log( 'FileLocker: Failed to move uploaded file from ' . $file_tmp . ' to ' . $target_file );
+				return;
+			}
+
+			// Set proper file permissions
+			chmod( $target_file, 0644 );
+
+			// Log successful upload
+			error_log( 'FileLocker: Successfully uploaded file ' . basename( $target_file ) );
+			
+			// Add success message
+			$this->add_upload_success( 'File uploaded successfully: ' . basename( $target_file ) );
 		}
+	}
+
+	/**
+	 * Get user-friendly upload error message based on PHP upload error code
+	 */
+	private function get_upload_error_message( $error_code ) {
+		switch ( $error_code ) {
+			case UPLOAD_ERR_INI_SIZE:
+				return 'File too large (exceeds server upload_max_filesize setting).';
+			case UPLOAD_ERR_FORM_SIZE:
+				return 'File too large (exceeds form MAX_FILE_SIZE setting).';
+			case UPLOAD_ERR_PARTIAL:
+				return 'File upload was interrupted. Please try again.';
+			case UPLOAD_ERR_NO_FILE:
+				return 'No file was selected for upload.';
+			case UPLOAD_ERR_NO_TMP_DIR:
+				return 'Server configuration error: missing temporary folder.';
+			case UPLOAD_ERR_CANT_WRITE:
+				return 'Server error: failed to write file to disk.';
+			case UPLOAD_ERR_EXTENSION:
+				return 'Upload stopped by PHP extension.';
+			default:
+				return 'Unknown upload error occurred.';
+		}
+	}
+
+	/**
+	 * Add upload error message for display to user
+	 */
+	private function add_upload_error( $message ) {
+		// Store error in WordPress transient for display on next page load
+		set_transient( 'filelocker_upload_error_' . get_current_user_id(), $message, 60 );
+		error_log( 'FileLocker Upload Error: ' . $message );
+	}
+
+	/**
+	 * Add upload success message for display to user
+	 */
+	private function add_upload_success( $message ) {
+		// Store success message in WordPress transient for display on next page load
+		set_transient( 'filelocker_upload_success_' . get_current_user_id(), $message, 60 );
 	}
 
 	public function delete_filelocker_file( $filelocker_name = null ) {

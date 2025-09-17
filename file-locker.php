@@ -91,7 +91,12 @@ function filelocker_menu_page() {
 					<input type="submit" value="Upload File" name="submitFileLocker" class="button button-primary filelocker-upload-btn" id="uploadButton" disabled>
 					<button type="button" class="button" id="clearButton" style="display: none;">Clear</button>
 				</div>
-				<p class="description">Choose a file to upload to the restricted files directory. Files will be protected and only accessible to logged-in users.</p>
+				<?php
+				$wp_max_file_size = wp_max_upload_size();
+				$max_file_size = apply_filters( 'filelocker_max_file_size', $wp_max_file_size );
+				$max_size_mb = round( $max_file_size / ( 1024 * 1024 ), 1 );
+				?>
+				<p class="description">Choose a file to upload to the restricted files directory. Files will be protected and only accessible to logged-in users. Maximum upload size: <?php echo esc_html( $max_size_mb ); ?>MB</p>
 			</form>
 		</div>
 		
@@ -224,5 +229,25 @@ function filelocker_display_deletion_notices() {
 	}
 }
 
+// Handle upload notices from transients
+function filelocker_display_upload_notices() {
+	$user_id = get_current_user_id();
+	
+	// Check for upload success message
+	$success_message = get_transient( 'filelocker_upload_success_' . $user_id );
+	if ( $success_message ) {
+		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( $success_message ) . '</p></div>';
+		delete_transient( 'filelocker_upload_success_' . $user_id );
+	}
+	
+	// Check for upload error message
+	$error_message = get_transient( 'filelocker_upload_error_' . $user_id );
+	if ( $error_message ) {
+		echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $error_message ) . '</p></div>';
+		delete_transient( 'filelocker_upload_error_' . $user_id );
+	}
+}
+
 // Hook admin notices for the file locker page
 add_action( 'admin_notices', 'filelocker_display_deletion_notices' );
+add_action( 'admin_notices', 'filelocker_display_upload_notices' );
