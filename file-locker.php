@@ -130,7 +130,7 @@ function filelocker_menu_page() {
 						<td>
 							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display: inline;">
 								<input type="hidden" name="action" value="filelocker_delete">
-								<input type="hidden" name="filelocker_name" value="<?php echo esc_attr( $single_file['dir'] ); ?>">
+								<input type="hidden" name="filelocker_name" value="<?php echo esc_attr( $single_file['rel'] ); ?>">
 								<input type="hidden" name="filelocker_delete_nonce" value="<?php echo esc_attr( $delete_nonce ); ?>">
 								<input type="hidden" name="redirect_url" value="<?php echo esc_attr( $current_url ); ?>">
 								<button type="submit" class="filelocker-delete-btn" onclick="return confirm('Are you sure you want to delete this file?');">Delete</button>

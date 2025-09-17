@@ -241,11 +241,14 @@ class FileLocker {
 						continue;
 					}
 					
-					// Calculate relative path from filelocker_dir for URL
+					// Calculate relative path from filelocker_dir for URL and safer server-side handling
 					$relative_path = str_replace( $this->filelocker_dir . '/', '', $file_path );
+					// Normalize path separators and remove leading slashes
+					$normalized_relative_path = ltrim( str_replace( '\\', '/', $relative_path ), '/' );
 					
 					$file_array['url'] = $this->filelocker_url . $relative_path;
-					$file_array['dir'] = $file_path;
+					$file_array['dir'] = $file_path; // Keep absolute path for backward compatibility
+					$file_array['rel'] = $normalized_relative_path; // Add relative path for safer forms
 					$file_array['mtime'] = filemtime( $file_path );
 
 					$files_array[] = $file_array;
@@ -402,6 +405,18 @@ class FileLocker {
 		set_transient( 'filelocker_upload_success_' . get_current_user_id(), $message, 60 );
 	}
 
+	/**
+	 * Check if a path is absolute (cross-platform)
+	 */
+	private function is_absolute_path( $path ) {
+		// Windows: Check for drive letter (C:) or UNC path (\\)
+		if ( DIRECTORY_SEPARATOR === '\\' ) {
+			return preg_match( '/^[a-zA-Z]:\\\\/', $path ) || strpos( $path, '\\\\' ) === 0;
+		}
+		// Unix/Linux: Check for leading slash
+		return strpos( $path, '/' ) === 0;
+	}
+
 	public function delete_filelocker_file( $filelocker_name = null ) {
 		if ( false === current_user_can( 'manage_options' ) ) {
 			return array( 'success' => false, 'error' => 'Insufficient permissions. Manage options capability required.' );
@@ -416,6 +431,14 @@ class FileLocker {
 			} else {
 				return array( 'success' => false, 'error' => 'No file specified for deletion.' );
 			}
+		}
+
+		// If the provided path appears to be relative, resolve it safely within the filelocker directory
+		if ( ! $this->is_absolute_path( $filelocker_name ) ) {
+			// Sanitize the relative path and prevent directory traversal
+			$relative_path = ltrim( str_replace( '\\', '/', $filelocker_name ), '/' );
+			$relative_path = preg_replace( '/\.\.\//', '', $relative_path ); // Remove any ../ patterns
+			$filelocker_name = $this->filelocker_dir . '/' . $relative_path;
 		}
 		
 		if ( ! file_exists( $filelocker_name ) ) {
