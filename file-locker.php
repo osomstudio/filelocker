@@ -3,7 +3,7 @@
  * Plugin Name: File Locker
  * Plugin URI: https://www.osomstudio.com/
  * Description: File Locker
- * Version: 1.0
+ * Version: 1.6
  * Requires at least: 5.2
  * Requires PHP: 7.2
  * Author: Osom Studio
@@ -35,26 +35,106 @@ function register_filelocker_menu_page() {
 
 add_action( 'admin_menu', 'register_filelocker_menu_page' );
 
+function filelocker_enqueue_admin_assets( $hook ) {
+	// Only load on our plugin's admin page
+	if ( $hook !== 'toplevel_page_filelocker' ) {
+		return;
+	}
+
+	// Get plugin version dynamically
+	$plugin_data = get_file_data( __FILE__, array( 'Version' => 'Version' ) );
+	$version = $plugin_data['Version'];
+
+	// Enqueue CSS
+	wp_enqueue_style(
+		'filelocker-admin-css',
+		plugin_dir_url( __FILE__ ) . 'assets/css/filelocker-admin.css',
+		array(),
+		$version
+	);
+
+	// Enqueue JavaScript
+	wp_enqueue_script(
+		'filelocker-admin-js',
+		plugin_dir_url( __FILE__ ) . 'assets/js/filelocker-admin.js',
+		array(),
+		$version,
+		true
+	);
+}
+
+add_action( 'admin_enqueue_scripts', 'filelocker_enqueue_admin_assets' );
+
 function filelocker_menu_page() {
 	$filelocker           = new FileLocker();
 	$all_files            = $filelocker->list_all_restricted_files();
 	$filelocker_admin_url = $filelocker->get_filelocker_admin_page();
 
-	echo '<h2>Upload file : </h2>';
 	?>
-	<form action="<?php echo $filelocker_admin_url; ?>" method="post" enctype="multipart/form-data">
-		Select file to upload:
-		<input type="file" name="fileLockerFile" id="fileLockerFile">
-		<input type="submit" value="Upload File" name="submitFileLocker">
-	</form>
+	<div class="wrap">
+		<h1 class="wp-heading-inline">File Locker</h1>
+		<hr class="wp-header-end">
+		
+		<h2 class="filelocker-section-title">Upload Restricted File</h2>
+		<div class="filelocker-upload-section">
+			<form action="<?php echo $filelocker_admin_url; ?>" method="post" enctype="multipart/form-data" class="filelocker-upload-form">
+				<div class="filelocker-drop-zone" id="filelockerDropZone">
+					<div class="drop-zone-content">
+						<div class="drop-zone-icon">📁</div>
+						<p class="drop-zone-text">Drag & drop your file here or <button type="button" class="drop-zone-browse">browse files</button></p>
+						<p class="drop-zone-selected" id="selectedFileName" style="display: none;"></p>
+					</div>
+					<input type="file" name="fileLockerFile" id="fileLockerFile" class="filelocker-file-input" style="display: none;">
+				</div>
+				<div class="upload-actions">
+					<input type="submit" value="Upload File" name="submitFileLocker" class="button button-primary filelocker-upload-btn" id="uploadButton" disabled>
+					<button type="button" class="button" id="clearButton" style="display: none;">Clear</button>
+				</div>
+				<p class="description">Choose a file to upload to the restricted files directory. Files will be protected and only accessible to logged-in users.</p>
+			</form>
+		</div>
+		
+		<h2 class="filelocker-section-title">All Restricted Files</h2>
+		
 	<?php
-
-	echo '<h2>All restricted files : </h2>';
-
-	foreach ( $all_files as $single_file ) {
-		$delete_file_parameter = $filelocker_admin_url . '&delete_filelocker=true&filelocker_name=' . $single_file['dir'];
-		echo $single_file['url'] . '<a href="' . $delete_file_parameter . '" style="margin-left: 30px;">Delete file</a><br>';
+	if ( !empty( $all_files ) ) {
+		?>
+		<div class="filelocker-table-wrapper">
+		<table class="filelocker-table">
+			<thead>
+				<tr>
+					<th>File Name</th>
+					<th>File URL</th>
+					<th>Upload Date</th>
+					<th>Actions</th>
+				</tr>
+			</thead>
+			<tbody>
+				<?php
+				foreach ( $all_files as $single_file ) {
+					$delete_file_parameter = $filelocker_admin_url . '&delete_filelocker=true&filelocker_name=' . $single_file['dir'];
+					$file_name = basename( $single_file['dir'] );
+					$upload_date = date( 'Y-m-d H:i:s', $single_file['mtime'] );
+					?>
+					<tr>
+						<td><?php echo esc_html( $file_name ); ?></td>
+						<td><a href="<?php echo esc_url( $single_file['url'] ); ?>" target="_blank"><?php echo esc_html( $single_file['url'] ); ?></a></td>
+						<td><?php echo esc_html( $upload_date ); ?></td>
+						<td><a href="<?php echo esc_url( $delete_file_parameter ); ?>" class="filelocker-delete-btn" onclick="return confirm('Are you sure you want to delete this file?');">Delete</a></td>
+					</tr>
+					<?php
+				}
+				?>
+			</tbody>
+		</table>
+		</div>
+		<?php
+	} else {
+		echo '<p>No files uploaded yet.</p>';
 	}
+	?>
+	</div>
+	<?php
 }
 
 function filelocker_uploader() {
@@ -82,37 +162,41 @@ function filelocker_delete_success() {
 	echo '<div class="notice notice-success is-dismissible"><p>File deleted succesfully.</p></div>';
 }
 
-function filelocker_delete_failure() {
-	echo '<div class="notice notice-error"><p>There was a problem with deleting selected file.</p></div>';
+function filelocker_delete_failure( $error_message = '' ) {
+	$message = 'There was a problem with deleting selected file.';
+	if ( ! empty( $error_message ) ) {
+		$message .= ' Error: ' . esc_html( $error_message );
+	}
+	echo '<div class="notice notice-error"><p>' . $message . '</p></div>';
 }
 
 function delete_filelocker_restricted_file() {
 	if ( isset( $_GET['delete_filelocker'] ) && $_GET['delete_filelocker'] === 'true' ) {
 		$filelocker = new FileLocker();
 
-		$delete_file = $filelocker->delete_filelocker_file();
+		$delete_result = $filelocker->delete_filelocker_file();
 
-		if ( $delete_file ) {
-			add_action( 'admin_notices', 'filelocker_delete_success' );
+		// Handle both new array format and legacy boolean format
+		if ( is_array( $delete_result ) ) {
+			if ( $delete_result['success'] ) {
+				add_action( 'admin_notices', 'filelocker_delete_success' );
+			} else {
+				add_action( 'admin_notices', function() use ( $delete_result ) {
+					filelocker_delete_failure( $delete_result['error'] );
+				});
+			}
 		} else {
-			add_action( 'admin_notices', 'filelocker_delete_failure' );
+			// Legacy boolean handling
+			if ( $delete_result ) {
+				add_action( 'admin_notices', 'filelocker_delete_success' );
+			} else {
+				add_action( 'admin_notices', function() {
+					filelocker_delete_failure( 'Unknown error occurred' );
+				});
+			}
 		}
 	}
 
 }
 
 add_action( 'init', 'delete_filelocker_restricted_file' );
-
-
-//function filelocker_permissions(): bool {
-//	if ( current_user_can( 'administrator' ) ) {
-//		return true;
-//	}
-//	return false;
-//}
-//
-//function filelocker_redirect(): string {
-//	return 'https://google.com';
-//}
-
-
