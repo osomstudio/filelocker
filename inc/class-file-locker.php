@@ -298,16 +298,21 @@ class FileLocker {
 		}
 	}
 
-	public function delete_filelocker_file() {
+	public function delete_filelocker_file( $filelocker_name = null ) {
 		if ( false === current_user_can( 'manage_options' ) ) {
 			return array( 'success' => false, 'error' => 'Insufficient permissions. Manage options capability required.' );
 		}
 
-		if ( ! isset( $_GET['filelocker_name'] ) ) {
-			return array( 'success' => false, 'error' => 'No file specified for deletion.' );
+		// If no parameter provided, try to get from POST (new secure method) or fallback to GET (legacy)
+		if ( $filelocker_name === null ) {
+			if ( isset( $_POST['filelocker_name'] ) ) {
+				$filelocker_name = $_POST['filelocker_name'];
+			} elseif ( isset( $_GET['filelocker_name'] ) ) {
+				$filelocker_name = $_GET['filelocker_name'];
+			} else {
+				return array( 'success' => false, 'error' => 'No file specified for deletion.' );
+			}
 		}
-
-		$filelocker_name = $_GET['filelocker_name'];
 		
 		if ( ! file_exists( $filelocker_name ) ) {
 			return array( 'success' => false, 'error' => 'File not found: ' . basename( $filelocker_name ) );

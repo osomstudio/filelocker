@@ -113,15 +113,24 @@ function filelocker_menu_page() {
 			<tbody>
 				<?php
 				foreach ( $all_files as $single_file ) {
-					$delete_file_parameter = $filelocker_admin_url . '&delete_filelocker=true&filelocker_name=' . $single_file['dir'];
 					$file_name = basename( $single_file['dir'] );
 					$upload_date = date( 'Y-m-d H:i:s', $single_file['mtime'] );
+					$delete_nonce = wp_create_nonce( 'filelocker_delete_action' );
+					$current_url = esc_url_raw( $_SERVER['REQUEST_URI'] );
 					?>
 					<tr>
 						<td><?php echo esc_html( $file_name ); ?></td>
 						<td><a href="<?php echo esc_url( $single_file['url'] ); ?>" target="_blank"><?php echo esc_html( $single_file['url'] ); ?></a></td>
 						<td><?php echo esc_html( $upload_date ); ?></td>
-						<td><a href="<?php echo esc_url( $delete_file_parameter ); ?>" class="filelocker-delete-btn" onclick="return confirm('Are you sure you want to delete this file?');">Delete</a></td>
+						<td>
+							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display: inline;">
+								<input type="hidden" name="action" value="filelocker_delete">
+								<input type="hidden" name="filelocker_name" value="<?php echo esc_attr( $single_file['dir'] ); ?>">
+								<input type="hidden" name="filelocker_delete_nonce" value="<?php echo esc_attr( $delete_nonce ); ?>">
+								<input type="hidden" name="redirect_url" value="<?php echo esc_attr( $current_url ); ?>">
+								<button type="submit" class="filelocker-delete-btn" onclick="return confirm('Are you sure you want to delete this file?');">Delete</button>
+							</form>
+						</td>
 					</tr>
 					<?php
 				}
@@ -159,45 +168,61 @@ function filelocker_error_notice() {
 add_action( 'admin_notices', 'filelocker_error_notice' );
 
 
-function filelocker_delete_success() {
-	echo '<div class="notice notice-success is-dismissible"><p>File deleted succesfully.</p></div>';
-}
 
-function filelocker_delete_failure( $error_message = '' ) {
-	$message = 'There was a problem with deleting selected file.';
-	if ( ! empty( $error_message ) ) {
-		$message .= ' Error: ' . esc_html( $error_message );
-	}
-	echo '<div class="notice notice-error"><p>' . $message . '</p></div>';
-}
-
-function delete_filelocker_restricted_file() {
-	if ( isset( $_GET['delete_filelocker'] ) && $_GET['delete_filelocker'] === 'true' ) {
-		$filelocker = new FileLocker();
-
-		$delete_result = $filelocker->delete_filelocker_file();
-
-		// Handle both new array format and legacy boolean format
-		if ( is_array( $delete_result ) ) {
-			if ( $delete_result['success'] ) {
-				add_action( 'admin_notices', 'filelocker_delete_success' );
-			} else {
-				add_action( 'admin_notices', function() use ( $delete_result ) {
-					filelocker_delete_failure( $delete_result['error'] );
-				});
-			}
-		} else {
-			// Legacy boolean handling
-			if ( $delete_result ) {
-				add_action( 'admin_notices', 'filelocker_delete_success' );
-			} else {
-				add_action( 'admin_notices', function() {
-					filelocker_delete_failure( 'Unknown error occurred' );
-				});
-			}
-		}
+function filelocker_handle_delete() {
+	// Verify nonce for security
+	if ( ! isset( $_POST['filelocker_delete_nonce'] ) || ! wp_verify_nonce( $_POST['filelocker_delete_nonce'], 'filelocker_delete_action' ) ) {
+		wp_die( 'Security check failed. Please try again.', 'Security Error', array( 'response' => 403 ) );
 	}
 
+	// Check user capability
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_die( 'You do not have sufficient permissions to delete files.', 'Permission Error', array( 'response' => 403 ) );
+	}
+
+	// Sanitize and validate file name input
+	if ( ! isset( $_POST['filelocker_name'] ) || empty( $_POST['filelocker_name'] ) ) {
+		wp_die( 'No file specified for deletion.', 'Invalid Request', array( 'response' => 400 ) );
+	}
+
+	$file_name = sanitize_text_field( $_POST['filelocker_name'] );
+
+	// Get redirect URL
+	$redirect_url = isset( $_POST['redirect_url'] ) ? esc_url_raw( $_POST['redirect_url'] ) : admin_url( 'admin.php?page=file-locker' );
+
+	// Instantiate FileLocker and perform deletion
+	$filelocker = new FileLocker();
+	$delete_result = $filelocker->delete_filelocker_file( $file_name );
+
+	// Handle deletion result and redirect with appropriate notice
+	if ( is_array( $delete_result ) && $delete_result['success'] ) {
+		$redirect_url = add_query_arg( 'filelocker_deleted', '1', $redirect_url );
+	} else {
+		$error_message = is_array( $delete_result ) ? $delete_result['error'] : 'Unknown error occurred';
+		$redirect_url = add_query_arg( array(
+			'filelocker_delete_error' => '1',
+			'error_message' => urlencode( $error_message )
+		), $redirect_url );
+	}
+
+	wp_safe_redirect( $redirect_url );
+	exit;
 }
 
-add_action( 'init', 'delete_filelocker_restricted_file' );
+// Hook the deletion handler to admin_post action
+add_action( 'admin_post_filelocker_delete', 'filelocker_handle_delete' );
+
+// Handle admin notices for deletion results
+function filelocker_display_deletion_notices() {
+	if ( isset( $_GET['filelocker_deleted'] ) && $_GET['filelocker_deleted'] === '1' ) {
+		echo '<div class="notice notice-success is-dismissible"><p>File deleted successfully.</p></div>';
+	}
+	
+	if ( isset( $_GET['filelocker_delete_error'] ) && $_GET['filelocker_delete_error'] === '1' ) {
+		$error_message = isset( $_GET['error_message'] ) ? urldecode( sanitize_text_field( $_GET['error_message'] ) ) : 'Unknown error occurred';
+		echo '<div class="notice notice-error is-dismissible"><p>Error deleting file: ' . esc_html( $error_message ) . '</p></div>';
+	}
+}
+
+// Hook admin notices for the file locker page
+add_action( 'admin_notices', 'filelocker_display_deletion_notices' );
