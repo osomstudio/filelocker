@@ -61,10 +61,12 @@ class FileLocker {
 			$error_array[] = 'Current version of "FileLocker Plugin" works only for Apache or Nginx. Your server is using "' . $_SERVER['SERVER_SOFTWARE'] . '".';
 		}
 
-		if ( 'nginx' === $this->server_status ) {
+		if ( 'nginx' === $this->server_status && ! get_option( 'filelocker_nginx_warning_shown' ) ) {
 			$error_array[] = 'Your server is running with <strong>nginx</strong>. This means you need to perform additional steps for it to work.
 			Find your nginx .conf file and paste below within <code>location / {...}</code> rule: <br><br><code>if ($request_filename ~ uploads/filelocker/.+){<br>
             &nbsp;&nbsp;rewrite ^(.*)$ $scheme://$host/?filelocker=$request_filename redirect;<br>}</code>';
+
+			update_option( 'filelocker_nginx_warning_shown', true );
 		}
 
 		if ( false === $this->check_if_filelocker_directory_exists() ) {
@@ -204,20 +206,57 @@ class FileLocker {
 	}
 
 	public function list_all_restricted_files(): array {
-		$all_files     = scandir( $this->filelocker_dir );
-		$files_array   = array();
-		$array_to_omit = array(
-			'.htaccess',
+		$files_array = $this->scan_directory_recursive( $this->filelocker_dir );
+
+		// Sort by modification time descending (most recent first)
+		usort( $files_array, function( $a, $b ) {
+			return $b['mtime'] - $a['mtime'];
+		});
+
+		return $files_array;
+	}
+
+	private function scan_directory_recursive( string $directory ): array {
+		$files_array = array();
+		$files_to_omit = array(
 			'.',
 			'..',
 		);
+		$extensions_to_omit = array(
+			'php',
+			'htaccess',
+		);
+
+		$all_files = scandir( $directory );
 
 		foreach ( $all_files as $single_file ) {
-			if ( in_array( $single_file, $array_to_omit, true ) === false ) {
-				$file_array['url'] = $this->filelocker_url . $single_file;
-				$file_array['dir'] = $this->filelocker_dir . '/' . $single_file;
+			if ( in_array( $single_file, $files_to_omit, true ) === false ) {
+				$file_path = $directory . '/' . $single_file;
+				
+				if ( is_file( $file_path ) ) {
+					// Skip files by extension or specific filenames
+					$file_extension = pathinfo( $single_file, PATHINFO_EXTENSION );
+					if ( in_array( strtolower( $file_extension ), $extensions_to_omit, true ) || 
+						 in_array( $single_file, array( '.htaccess' ), true ) ) {
+						continue;
+					}
+					
+					// Calculate relative path from filelocker_dir for URL and safer server-side handling
+					$relative_path = str_replace( $this->filelocker_dir . '/', '', $file_path );
+					// Normalize path separators and remove leading slashes
+					$normalized_relative_path = ltrim( str_replace( '\\', '/', $relative_path ), '/' );
+					
+					$file_array['url'] = $this->filelocker_url . $relative_path;
+					$file_array['dir'] = $file_path; // Keep absolute path for backward compatibility
+					$file_array['rel'] = $normalized_relative_path; // Add relative path for safer forms
+					$file_array['mtime'] = filemtime( $file_path );
 
-				$files_array[] = $file_array;
+					$files_array[] = $file_array;
+				} elseif ( is_dir( $file_path ) ) {
+					// Recursively scan subdirectories
+					$subdirectory_files = $this->scan_directory_recursive( $file_path );
+					$files_array = array_merge( $files_array, $subdirectory_files );
+				}
 			}
 		}
 
@@ -227,28 +266,206 @@ class FileLocker {
 	public function file_handler() {
 		$target_dir = $this->filelocker_dir;
 
-		if ( isset( $_FILES['fileLockerFile'] ) ) {
-			$target_file = $target_dir . '/' . basename( $_FILES['fileLockerFile']['name'] );
-
-			if ( isset( $_POST['submitFileLocker'] ) && current_user_can( 'manage_options' ) ) {
-				$file_tmp = $_FILES['fileLockerFile']['tmp_name'];
-
-				move_uploaded_file( $file_tmp, $target_file );
+		if ( isset( $_POST['submitFileLocker'] ) && current_user_can( 'manage_options' ) ) {
+			// Verify nonce for security
+			if ( ! isset( $_POST['filelocker_upload_nonce'] ) || ! wp_verify_nonce( $_POST['filelocker_upload_nonce'], 'filelocker_upload_action' ) ) {
+				$this->add_upload_error( 'Security verification failed. Please try again.' );
+				return;
 			}
+
+			// Check if file was uploaded
+			if ( ! isset( $_FILES['fileLockerFile'] ) || empty( $_FILES['fileLockerFile']['name'] ) ) {
+				$this->add_upload_error( 'No file was selected for upload.' );
+				return;
+			}
+
+			// Validate upload error status
+			if ( $_FILES['fileLockerFile']['error'] !== UPLOAD_ERR_OK ) {
+				$error_message = $this->get_upload_error_message( $_FILES['fileLockerFile']['error'] );
+				$this->add_upload_error( $error_message );
+				return;
+			}
+
+			// Enforce max file size (use WordPress upload limit)
+			$wp_max_file_size = wp_max_upload_size();
+			$max_file_size = apply_filters( 'filelocker_max_file_size', $wp_max_file_size );
+			if ( $_FILES['fileLockerFile']['size'] > $max_file_size ) {
+				$max_size_mb = round( $max_file_size / ( 1024 * 1024 ), 1 );
+				$this->add_upload_error( "File too large. Maximum allowed size is {$max_size_mb}MB." );
+				return;
+			}
+
+			$original_filename = basename( $_FILES['fileLockerFile']['name'] );
+			
+			// Sanitize filename using WordPress function
+			$sanitized_filename = sanitize_file_name( $original_filename );
+			
+			if ( empty( $sanitized_filename ) ) {
+				$this->add_upload_error( 'Invalid filename. Please rename your file and try again.' );
+				return;
+			}
+
+			// Validate file type and mime type
+			$file_type_check = wp_check_filetype_and_ext( $_FILES['fileLockerFile']['tmp_name'], $sanitized_filename );
+			
+			if ( ! $file_type_check['type'] || ! $file_type_check['ext'] ) {
+				$this->add_upload_error( 'File type not allowed. Please upload a valid file.' );
+				return;
+			}
+
+			// Additional security: check against WordPress allowed mime types
+			$allowed_mimes = get_allowed_mime_types();
+			if ( ! in_array( $file_type_check['type'], $allowed_mimes ) ) {
+				$this->add_upload_error( 'File type not permitted by WordPress security settings.' );
+				return;
+			}
+
+			$target_file = $target_dir . '/' . $sanitized_filename;
+
+			// Handle duplicate filenames by adding a suffix
+			if ( file_exists( $target_file ) ) {
+				$pathinfo = pathinfo( $sanitized_filename );
+				$filename = $pathinfo['filename'];
+				$extension = isset( $pathinfo['extension'] ) ? '.' . $pathinfo['extension'] : '';
+				$counter = 1;
+
+				do {
+					$new_filename = $filename . '_' . $counter . $extension;
+					$target_file = $target_dir . '/' . $new_filename;
+					$counter++;
+				} while ( file_exists( $target_file ) );
+			}
+
+			// Perform the file upload with proper error checking
+			$file_tmp = $_FILES['fileLockerFile']['tmp_name'];
+			
+			// Verify the temporary file exists and is readable
+			if ( ! is_uploaded_file( $file_tmp ) ) {
+				$this->add_upload_error( 'Invalid upload. Please try again.' );
+				error_log( 'FileLocker: Invalid uploaded file detected for ' . $original_filename );
+				return;
+			}
+
+			// Attempt to move the uploaded file
+			if ( ! move_uploaded_file( $file_tmp, $target_file ) ) {
+				$this->add_upload_error( 'Failed to save file. Please check directory permissions.' );
+				error_log( 'FileLocker: Failed to move uploaded file from ' . $file_tmp . ' to ' . $target_file );
+				return;
+			}
+
+			// Set proper file permissions
+			chmod( $target_file, 0644 );
+
+			// Log successful upload
+			error_log( 'FileLocker: Successfully uploaded file ' . basename( $target_file ) );
+			
+			// Add success message
+			$this->add_upload_success( 'File uploaded successfully: ' . basename( $target_file ) );
 		}
 	}
 
-	public function delete_filelocker_file() {
-		if ( false === current_user_can( 'administrator' ) ) {
-			return false;
+	/**
+	 * Get user-friendly upload error message based on PHP upload error code
+	 */
+	private function get_upload_error_message( $error_code ) {
+		switch ( $error_code ) {
+			case UPLOAD_ERR_INI_SIZE:
+				return 'File too large (exceeds server upload_max_filesize setting).';
+			case UPLOAD_ERR_FORM_SIZE:
+				return 'File too large (exceeds form MAX_FILE_SIZE setting).';
+			case UPLOAD_ERR_PARTIAL:
+				return 'File upload was interrupted. Please try again.';
+			case UPLOAD_ERR_NO_FILE:
+				return 'No file was selected for upload.';
+			case UPLOAD_ERR_NO_TMP_DIR:
+				return 'Server configuration error: missing temporary folder.';
+			case UPLOAD_ERR_CANT_WRITE:
+				return 'Server error: failed to write file to disk.';
+			case UPLOAD_ERR_EXTENSION:
+				return 'Upload stopped by PHP extension.';
+			default:
+				return 'Unknown upload error occurred.';
+		}
+	}
+
+	/**
+	 * Add upload error message for display to user
+	 */
+	private function add_upload_error( $message ) {
+		// Store error in WordPress transient for display on next page load
+		set_transient( 'filelocker_upload_error_' . get_current_user_id(), $message, 60 );
+		error_log( 'FileLocker Upload Error: ' . $message );
+	}
+
+	/**
+	 * Add upload success message for display to user
+	 */
+	private function add_upload_success( $message ) {
+		// Store success message in WordPress transient for display on next page load
+		set_transient( 'filelocker_upload_success_' . get_current_user_id(), $message, 60 );
+	}
+
+	/**
+	 * Check if a path is absolute (cross-platform)
+	 */
+	private function is_absolute_path( $path ) {
+		// Windows: Check for drive letter (C:) or UNC path (\\)
+		if ( DIRECTORY_SEPARATOR === '\\' ) {
+			return preg_match( '/^[a-zA-Z]:\\\\/', $path ) || strpos( $path, '\\\\' ) === 0;
+		}
+		// Unix/Linux: Check for leading slash
+		return strpos( $path, '/' ) === 0;
+	}
+
+	public function delete_filelocker_file( $filelocker_name = null ) {
+		if ( false === current_user_can( 'manage_options' ) ) {
+			return array( 'success' => false, 'error' => 'Insufficient permissions. Manage options capability required.' );
 		}
 
-		if ( isset( $_GET['filelocker_name'] ) ) {
-			$filelocker_name = $_GET['filelocker_name'];
-			return unlink( $filelocker_name );
+		// If no parameter provided, try to get from POST (new secure method) or fallback to GET (legacy)
+		if ( $filelocker_name === null ) {
+			if ( isset( $_POST['filelocker_name'] ) ) {
+				$filelocker_name = $_POST['filelocker_name'];
+			} elseif ( isset( $_GET['filelocker_name'] ) ) {
+				$filelocker_name = $_GET['filelocker_name'];
+			} else {
+				return array( 'success' => false, 'error' => 'No file specified for deletion.' );
+			}
 		}
 
-		return false;
+		// If the provided path appears to be relative, resolve it safely within the filelocker directory
+		if ( ! $this->is_absolute_path( $filelocker_name ) ) {
+			// Sanitize the relative path and prevent directory traversal
+			$relative_path = ltrim( str_replace( '\\', '/', $filelocker_name ), '/' );
+			$relative_path = preg_replace( '/\.\.\//', '', $relative_path ); // Remove any ../ patterns
+			$filelocker_name = $this->filelocker_dir . '/' . $relative_path;
+		}
+		
+		if ( ! file_exists( $filelocker_name ) ) {
+			return array( 'success' => false, 'error' => 'File not found: ' . basename( $filelocker_name ) );
+		}
+
+		if ( ! $this->check_if_file_in_directory( $filelocker_name ) ) {
+			return array( 'success' => false, 'error' => 'File is not in the secure directory.' );
+		}
+
+		if ( ! is_writable( dirname( $filelocker_name ) ) ) {
+			return array( 'success' => false, 'error' => 'Directory is not writable. Check file permissions.' );
+		}
+
+		if ( ! is_writable( $filelocker_name ) ) {
+			return array( 'success' => false, 'error' => 'File is not writable. Check file permissions.' );
+		}
+
+		$result = unlink( $filelocker_name );
+		
+		if ( $result ) {
+			return array( 'success' => true );
+		} else {
+			$error = error_get_last();
+			$error_message = $error ? $error['message'] : 'Unknown error occurred during file deletion.';
+			return array( 'success' => false, 'error' => $error_message );
+		}
 	}
 
 	public function is_filelocker_file_restricted( string $file_url ): bool {
