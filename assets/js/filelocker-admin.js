@@ -52,6 +52,16 @@ document.addEventListener('DOMContentLoaded', function() {
 		}
 	}
 
+	/**
+	 * Update the UI to reflect a selected file or clear the selection.
+	 *
+	 * When provided a File, displays the file name, enables the upload and clear controls,
+	 * adds the 'has-file' class to the drop zone, and enforces a 100 MB size limit
+	 * (displays an error and disables upload if exceeded). When passed `null`, hides file
+	 * UI, disables controls, removes the 'has-file' class, and resets the filename color.
+	 *
+	 * @param {File|null} file - The selected File object, or `null` to clear the current selection.
+	 */
 	function handleFileSelection(file) {
 		if (file) {
 			selectedFileName.textContent = '✓ Selected: ' + file.name;

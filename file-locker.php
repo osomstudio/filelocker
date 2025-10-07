@@ -22,6 +22,12 @@ function call_view_download_file() {
 add_action( 'init', 'call_view_download_file' );
 
 
+/**
+ * Register the File Locker top-level admin menu and its Settings submenu.
+ *
+ * Adds a "File Locker" admin menu entry (visible to users with the `manage_options`
+ * capability) and a "Settings" submenu that links to the plugin settings page.
+ */
 function register_filelocker_menu_page() {
 	add_menu_page(
 		__( 'FileLocker', 'filelocker' ),
@@ -44,7 +50,11 @@ function register_filelocker_menu_page() {
 
 add_action( 'admin_menu', 'register_filelocker_menu_page' );
 
-// Register settings for the submenu page
+/**
+ * Registers the 'filelocker_custom_url' option under the 'filelocker_settings' settings group.
+ *
+ * The registered setting is saved with a sanitize callback of `filelocker_sanitize_url`.
+ */
 function filelocker_register_settings() {
 	register_setting(
 		'filelocker_settings',
@@ -56,6 +66,15 @@ function filelocker_register_settings() {
 }
 add_action( 'admin_init', 'filelocker_register_settings' );
 
+/**
+ * Sanitizes and validates a custom redirect URL for the File Locker settings.
+ *
+ * If a non-empty URL is provided but fails validation, registers a settings error
+ * and returns the currently saved `filelocker_custom_url` option instead.
+ *
+ * @param string $url The input URL to sanitize.
+ * @return string The sanitized URL, or the existing saved option when the input is invalid.
+ */
 function filelocker_sanitize_url( $url ) {
 	$url = sanitize_url( $url );
 
@@ -67,6 +86,13 @@ function filelocker_sanitize_url( $url ) {
 	return $url;
 }
 
+/**
+ * Enqueues the plugin's admin CSS and JavaScript on the File Locker admin pages.
+ *
+ * @param string $hook The current admin page hook suffix; assets are enqueued only when this equals
+ *                     'toplevel_page_filelocker' (main File Locker page) or
+ *                     'file-locker_page_filelocker-settings' (File Locker Settings page).
+ */
 function filelocker_enqueue_admin_assets( $hook ) {
 	if ( 'toplevel_page_filelocker' !== $hook && 'file-locker_page_filelocker-settings' !== $hook ) {
 		return;
@@ -96,6 +122,12 @@ function filelocker_enqueue_admin_assets( $hook ) {
 
 add_action( 'admin_enqueue_scripts', 'filelocker_enqueue_admin_assets' );
 
+/**
+ * Render the File Locker admin page with upload controls and a listing of restricted files.
+ *
+ * Outputs the HTML for the admin UI: an upload area (with nonce-protected form and file size info)
+ * and a table of all restricted files showing file name, URL, upload date, and a delete action.
+ */
 function filelocker_menu_page() {
 	$filelocker           = new FileLocker();
 	$all_files            = $filelocker->list_all_restricted_files();
@@ -183,6 +215,11 @@ function filelocker_menu_page() {
 	<?php
 }
 
+/**
+ * Displays the File Locker settings admin page with a Redirect Page field.
+ *
+ * Renders a settings form that lets administrators enter or select a custom redirect URL (via a datalist of site pages) used when a file is restricted; if left blank, the site homepage will be used as the redirect destination.
+ */
 function filelocker_settings_page() {
 	$saved_url = get_option( 'filelocker_custom_url', '' );
 
@@ -233,6 +270,13 @@ function filelocker_settings_page() {
 	<?php
 }
 
+/**
+ * Initialize the FileLocker upload handler and process any pending upload request.
+ *
+ * Instantiates the FileLocker class and invokes its file_handler method to handle file upload processing.
+ *
+ * @return void
+ */
 function filelocker_uploader() {
 	$filelocker_uploads = new FileLocker();
 	$filelocker_uploads->file_handler();
@@ -240,6 +284,11 @@ function filelocker_uploader() {
 
 add_action( 'init', 'filelocker_uploader' );
 
+/**
+ * Renders WordPress admin error notices for any configuration errors reported by FileLocker.
+ *
+ * For each configuration error reported by the FileLocker instance, an admin error notice is output so administrators can see and address configuration issues.
+ */
 function filelocker_error_notice() {
 	$filelocker        = new FileLocker();
 	$filelocker_errors = $filelocker->config_error();
@@ -255,6 +304,17 @@ add_action( 'admin_notices', 'filelocker_error_notice' );
 
 
 
+/**
+ * Handle an admin request to delete a restricted file and redirect back to the admin UI.
+ *
+ * Verifies a deletion nonce and current user's capability, validates the posted file name, invokes
+ * FileLocker->delete_filelocker_file() to remove the file, and redirects to the provided or default
+ * admin page. On success the redirect URL will include `filelocker_deleted=1`. On failure the
+ * redirect URL will include `filelocker_delete_error=1` and an `error_message` query parameter.
+ *
+ * This function will abort with wp_die() on failed security checks, insufficient permissions, or
+ * missing file name input; on normal completion it issues a safe redirect and exits.
+ */
 function filelocker_handle_delete() {
 	// Verify nonce for security
 	if ( ! isset( $_POST['filelocker_delete_nonce'] ) || ! wp_verify_nonce( $_POST['filelocker_delete_nonce'], 'filelocker_delete_action' ) ) {
@@ -301,7 +361,14 @@ function filelocker_handle_delete() {
 // Hook the deletion handler to admin_post action
 add_action( 'admin_post_filelocker_delete', 'filelocker_handle_delete' );
 
-// Handle admin notices for deletion results
+/**
+ * Displays admin notices indicating the result of a file deletion operation.
+ *
+ * Reads the `filelocker_deleted` and `filelocker_delete_error` query parameters to render
+ * a success notice when deletion succeeded, or an error notice when deletion failed.
+ * When an error occurs, uses the `error_message` query parameter (sanitized and URL-decoded)
+ * as the message text; falls back to "Unknown error occurred" if not provided.
+ */
 function filelocker_display_deletion_notices() {
 	if ( isset( $_GET['filelocker_deleted'] ) && '1' === $_GET['filelocker_deleted'] ) {
 		echo '<div class="notice notice-success is-dismissible"><p>File deleted successfully.</p></div>';
@@ -313,7 +380,12 @@ function filelocker_display_deletion_notices() {
 	}
 }
 
-// Handle upload notices from transients
+/**
+ * Displays any per-user upload success or error notices stored in transients and clears them.
+ *
+ * Retrieves transient messages keyed to the current user for upload success and upload error,
+ * prints corresponding admin notices if present, and deletes those transients to avoid repeat display.
+ */
 function filelocker_display_upload_notices() {
 	$user_id = get_current_user_id();
 
@@ -336,6 +408,12 @@ function filelocker_display_upload_notices() {
 add_action( 'admin_notices', 'filelocker_display_deletion_notices' );
 add_action( 'admin_notices', 'filelocker_display_upload_notices' );
 
+/**
+ * Display settings-related admin notices for the File Locker plugin.
+ *
+ * Outputs any validation errors registered for the 'filelocker_custom_url' setting
+ * and shows a dismissible success notice when settings have been saved.
+ */
 function filelocker_display_settings_notices() {
 	settings_errors( 'filelocker_custom_url' );
 
@@ -345,6 +423,17 @@ function filelocker_display_settings_notices() {
 }
 add_action( 'admin_notices', 'filelocker_display_settings_notices' );
 
+/**
+ * Build a redirect URL for a restricted file access flow.
+ *
+ * If a custom redirect URL option is configured, returns that URL with a `referrer` query
+ * parameter pointing to either the uploads-based path derived from `$filename` (when the
+ * filename contains `/uploads/...`) or the current request URI (with any `filelocker` query
+ * segment removed). If no custom redirect URL is configured, returns the site home URL.
+ *
+ * @param string $filename The requested file path or name used to derive a referrer path.
+ * @return string The URL to redirect the user to.
+ */
 function filelocker_redirect( $filename ) {
 	$custom_url = get_option( 'filelocker_custom_url', '' );
 
