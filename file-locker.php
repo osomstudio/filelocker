@@ -3,7 +3,7 @@
  * Plugin Name: File Locker
  * Plugin URI: https://www.osomstudio.com/
  * Description: File Locker
- * Version: 1.6
+ * Version: 1.7
  * Requires at least: 5.2
  * Requires PHP: 7.2
  * Author: Osom Studio
