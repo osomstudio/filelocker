@@ -26,6 +26,14 @@ class FileLocker {
 	}
 
 
+	/**
+	 * Determines whether the current request is permitted to access FileLocker-protected files.
+	 *
+	 * If a custom permission callback (filelocker_permissions) exists, its result is used;
+	 * otherwise access is granted for authenticated (logged-in) users.
+	 *
+	 * @return bool `true` if access is permitted, `false` otherwise.
+	 */
 	public function access_conditions(): bool {
 		if ( function_exists( 'filelocker_permissions' ) ) {
 			return filelocker_permissions();
@@ -86,6 +94,15 @@ class FileLocker {
 		return true;
 	}
 
+	/**
+	 * Serves a file from the secured FileLocker directory when requested, or redirects if access is denied.
+	 *
+	 * If the `filelocker` query parameter is present and non-empty, and the target file exists, is inside
+	 * the FileLocker directory, and access conditions are met, this method sends appropriate content
+	 * headers, outputs the file contents, and terminates execution. If any of those checks fail, it
+	 * redirects to the URL returned by `filelocker_redirect($filename)` when available, or to the site's
+	 * home URL, and then terminates execution.
+	 */
 	public function view_download_file() {
 		if ( isset( $_GET['filelocker'] ) ) {
 			$filename = $_GET['filelocker'];
@@ -184,6 +201,13 @@ class FileLocker {
 		return file_exists( $filelocker_path );
 	}
 
+	/**
+	 * Ensure a .htaccess file exists inside the FileLocker directory, creating it if missing.
+	 *
+	 * When creating the file, writes the content returned by htaccess_content() into it.
+	 *
+	 * @return bool `true` if the .htaccess file was created, `false` if it already existed.
+	 */
 	public function create_htaccess(): bool {
 
 		if ( $this->check_if_htaccess_exists() === false ) {
@@ -208,6 +232,18 @@ class FileLocker {
 		return $htaccess;
 	}
 
+	/**
+	 * Retrieve all restricted files under the FileLocker directory, sorted newest first.
+	 *
+	 * Scans the FileLocker directory recursively and returns a list of discovered files
+	 * ordered by modification time, with the most recently modified files first.
+	 *
+	 * @return array[] List of file metadata arrays. Each item contains:
+	 *                  - 'url'   : string Public URL to the file.
+	 *                  - 'dir'   : string Absolute filesystem path to the file.
+	 *                  - 'rel'   : string Normalized relative path within the FileLocker directory.
+	 *                  - 'mtime' : int    File modification time (UNIX timestamp).
+	 */
 	public function list_all_restricted_files(): array {
 		$files_array = $this->scan_directory_recursive( $this->filelocker_dir );
 
@@ -222,6 +258,20 @@ class FileLocker {
 		return $files_array;
 	}
 
+	/**
+	 * Recursively collects metadata for files under a directory, excluding PHP and htaccess files.
+	 *
+	 * Scans the given directory and its subdirectories and returns an array of file metadata for
+	 * files that are not omitted (e.g., files with extensions `php`, `htaccess` and the filename
+	 * `.htaccess` are skipped).
+	 *
+	 * @param string $directory Absolute filesystem path to the directory to scan.
+	 * @return array[] Array of file metadata arrays. Each element contains:
+	 *                 - `url`   : string Public URL to the file.
+	 *                 - `dir`   : string Absolute filesystem path to the file.
+	 *                 - `rel`   : string Normalized relative path inside the FileLocker directory (no leading slash).
+	 *                 - `mtime` : int    File modification time (Unix timestamp).
+	 */
 	private function scan_directory_recursive( string $directory ): array {
 		$files_array        = array();
 		$files_to_omit      = array(
@@ -269,6 +319,13 @@ class FileLocker {
 		return $files_array;
 	}
 
+	/**
+	 * Processes an admin file upload from the FileLocker form and stores the file in the secure filelocker directory.
+	 *
+	 * Validates capability and nonce, enforces size and allowed mime/type constraints, sanitizes and deduplicates filenames,
+	 * moves the uploaded file into the filelocker directory, sets file permissions, logs the outcome, and records a success
+	 * or error message for display to the user.
+	 */
 	public function file_handler() {
 		$target_dir = $this->filelocker_dir;
 
@@ -423,6 +480,19 @@ class FileLocker {
 		return strpos( $path, '/' ) === 0;
 	}
 
+	/**
+	 * Deletes a file from the FileLocker directory after validating permissions and path safety.
+	 *
+	 * If no $filelocker_name is provided, the function will attempt to read it from POST['filelocker_name'] then GET['filelocker_name'].
+	 *
+	 * @param string|null $filelocker_name Optional absolute or relative path (relative paths are resolved inside the filelocker directory).
+	 * @return array {
+	 *     Result of the deletion attempt.
+	 *
+	 *     @type bool   $success True on successful deletion, false on failure.
+	 *     @type string $error   Present when `$success` is false; a human-readable error message describing the failure.
+	 * }
+	 */
 	public function delete_filelocker_file( $filelocker_name = null ) {
 		if ( false === current_user_can( 'manage_options' ) ) {
 			return array(
@@ -497,6 +567,12 @@ class FileLocker {
 		}
 	}
 
+	/**
+	 * Determines whether requesting a file URL results in an HTTP 302 redirect.
+	 *
+	 * @param string $file_url The full URL of the file to test.
+	 * @return bool `true` if the URL responds with HTTP 302, `false` otherwise.
+	 */
 	public function is_filelocker_file_restricted( string $file_url ): bool {
 		$curl = curl_init();
 
