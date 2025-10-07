@@ -76,10 +76,11 @@ add_action( 'admin_init', 'filelocker_register_settings' );
  * @return string The sanitized URL, or the existing saved option when the input is invalid.
  */
 function filelocker_sanitize_url( $url ) {
-	$url = sanitize_url( $url );
+	$url = esc_url_raw( $url );
 
 	if ( ! empty( $url ) && ! filter_var( $url, FILTER_VALIDATE_URL ) ) {
 		add_settings_error( 'filelocker_custom_url', 'invalid_url', 'Please enter a valid URL.' );
+
 		return get_option( 'filelocker_custom_url', '' );
 	}
 
@@ -441,12 +442,20 @@ function filelocker_redirect( $filename ) {
 		if ( preg_match( '#/uploads/(.+)$#', $filename, $matches ) ) {
 			$url_path = '/app/uploads/' . $matches[1];
 		} else {
-			$url_path = $_SERVER['REQUEST_URI'];
+			$url_path = esc_url_raw( $_SERVER['REQUEST_URI'] );
 			$url_path = preg_replace( '/[?&]filelocker=.*/', '', $url_path );
 		}
 
 		$separator = ( false !== strpos( $custom_url, '?' ) ) ? '&' : '?';
-		return $custom_url . $separator . 'referrer=' . rawurlencode( $url_path );
+
+		if ( defined( 'ICL_LANGUAGE_CODE' ) ) {
+			$locale_param = ICL_LANGUAGE_CODE;
+		} else {
+			$current_locale = get_locale();
+			$locale_param   = ( 'en_US' === $current_locale ) ? 'en' : substr( $current_locale, 0, 2 );
+		}
+
+		return $custom_url . $separator . 'referrer=' . rawurlencode( $url_path ) . '&locale=' . $locale_param;
 	}
 
 	return home_url();
