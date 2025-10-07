@@ -68,7 +68,7 @@ function filelocker_sanitize_url( $url ) {
 }
 
 function filelocker_enqueue_admin_assets( $hook ) {
-	if ( $hook !== 'toplevel_page_filelocker' && $hook !== 'file-locker_page_filelocker-settings' ) {
+	if ( 'toplevel_page_filelocker' !== $hook && 'file-locker_page_filelocker-settings' !== $hook ) {
 		return;
 	}
 
@@ -108,7 +108,7 @@ function filelocker_menu_page() {
 		
 		<h2 class="filelocker-section-title">Upload Restricted File</h2>
 		<div class="filelocker-upload-section">
-			<form action="<?php echo $filelocker_admin_url; ?>" method="post" enctype="multipart/form-data" class="filelocker-upload-form">
+			<form action="<?php echo esc_url( $filelocker_admin_url ); ?>" method="post" enctype="multipart/form-data" class="filelocker-upload-form">
 				<?php wp_nonce_field( 'filelocker_upload_action', 'filelocker_upload_nonce' ); ?>
 				<div class="filelocker-drop-zone" id="filelockerDropZone">
 					<div class="drop-zone-content">
@@ -150,7 +150,7 @@ function filelocker_menu_page() {
 				<?php
 				foreach ( $all_files as $single_file ) {
 					$file_name    = basename( $single_file['dir'] );
-					$upload_date  = date( 'Y-m-d H:i:s', $single_file['mtime'] );
+					$upload_date  = gmdate( 'Y-m-d H:i:s', $single_file['mtime'] );
 					$delete_nonce = wp_create_nonce( 'filelocker_delete_action' );
 					$current_url  = esc_url_raw( $_SERVER['REQUEST_URI'] );
 					?>
@@ -246,7 +246,7 @@ function filelocker_error_notice() {
 
 	if ( ! empty( $filelocker_errors ) ) {
 		foreach ( $filelocker_errors as $single_error ) {
-			echo '<div class="error"><p>' . $single_error . '</p></div>';
+			echo '<div class="error"><p>' . esc_html( $single_error ) . '</p></div>';
 		}
 	}
 }
@@ -288,7 +288,7 @@ function filelocker_handle_delete() {
 		$redirect_url  = add_query_arg(
 			array(
 				'filelocker_delete_error' => '1',
-				'error_message'           => urlencode( $error_message ),
+				'error_message'           => rawurlencode( $error_message ),
 			),
 			$redirect_url
 		);

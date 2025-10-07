@@ -29,10 +29,8 @@ class FileLocker {
 	public function access_conditions(): bool {
 		if ( function_exists( 'filelocker_permissions' ) ) {
 			return filelocker_permissions();
-		} else {
-			if ( is_user_logged_in() ) {
+		} elseif ( is_user_logged_in() ) {
 				return true;
-			}
 		}
 
 		return false;
@@ -107,7 +105,7 @@ class FileLocker {
 					exit;
 				} else {
 					if ( function_exists( 'filelocker_redirect' ) ) {
-						$redirect_url = filelocker_redirect($filename);
+						$redirect_url = filelocker_redirect( $filename );
 					} else {
 						$redirect_url = $this->home_url;
 					}
@@ -189,7 +187,12 @@ class FileLocker {
 	public function create_htaccess(): bool {
 
 		if ( $this->check_if_htaccess_exists() === false ) {
-			$htaccess_file = fopen( $this->filelocker_dir . '/.htaccess', 'w' ) or die( 'Unable to open file!' );
+			$htaccess_file = fopen( $this->filelocker_dir . '/.htaccess', 'w' );
+
+			if ( ! $htaccess_file ) {
+				wp_die( 'Unable to open file!' );
+			}
+
 			fwrite( $htaccess_file, $this->htaccess_content() );
 			fclose( $htaccess_file );
 			return true;
@@ -209,16 +212,19 @@ class FileLocker {
 		$files_array = $this->scan_directory_recursive( $this->filelocker_dir );
 
 		// Sort by modification time descending (most recent first)
-		usort( $files_array, function( $a, $b ) {
-			return $b['mtime'] - $a['mtime'];
-		});
+		usort(
+			$files_array,
+			function ( $a, $b ) {
+				return $b['mtime'] - $a['mtime'];
+			}
+		);
 
 		return $files_array;
 	}
 
 	private function scan_directory_recursive( string $directory ): array {
-		$files_array = array();
-		$files_to_omit = array(
+		$files_array        = array();
+		$files_to_omit      = array(
 			'.',
 			'..',
 		);
@@ -232,30 +238,30 @@ class FileLocker {
 		foreach ( $all_files as $single_file ) {
 			if ( in_array( $single_file, $files_to_omit, true ) === false ) {
 				$file_path = $directory . '/' . $single_file;
-				
+
 				if ( is_file( $file_path ) ) {
 					// Skip files by extension or specific filenames
 					$file_extension = pathinfo( $single_file, PATHINFO_EXTENSION );
-					if ( in_array( strtolower( $file_extension ), $extensions_to_omit, true ) || 
-						 in_array( $single_file, array( '.htaccess' ), true ) ) {
+					if ( in_array( strtolower( $file_extension ), $extensions_to_omit, true ) ||
+						in_array( $single_file, array( '.htaccess' ), true ) ) {
 						continue;
 					}
-					
+
 					// Calculate relative path from filelocker_dir for URL and safer server-side handling
 					$relative_path = str_replace( $this->filelocker_dir . '/', '', $file_path );
 					// Normalize path separators and remove leading slashes
 					$normalized_relative_path = ltrim( str_replace( '\\', '/', $relative_path ), '/' );
-					
-					$file_array['url'] = $this->filelocker_url . $relative_path;
-					$file_array['dir'] = $file_path; // Keep absolute path for backward compatibility
-					$file_array['rel'] = $normalized_relative_path; // Add relative path for safer forms
+
+					$file_array['url']   = $this->filelocker_url . $relative_path;
+					$file_array['dir']   = $file_path; // Keep absolute path for backward compatibility
+					$file_array['rel']   = $normalized_relative_path; // Add relative path for safer forms
 					$file_array['mtime'] = filemtime( $file_path );
 
 					$files_array[] = $file_array;
 				} elseif ( is_dir( $file_path ) ) {
 					// Recursively scan subdirectories
 					$subdirectory_files = $this->scan_directory_recursive( $file_path );
-					$files_array = array_merge( $files_array, $subdirectory_files );
+					$files_array        = array_merge( $files_array, $subdirectory_files );
 				}
 			}
 		}
@@ -280,7 +286,7 @@ class FileLocker {
 			}
 
 			// Validate upload error status
-			if ( $_FILES['fileLockerFile']['error'] !== UPLOAD_ERR_OK ) {
+			if ( UPLOAD_ERR_OK !== $_FILES['fileLockerFile']['error'] ) {
 				$error_message = $this->get_upload_error_message( $_FILES['fileLockerFile']['error'] );
 				$this->add_upload_error( $error_message );
 				return;
@@ -288,7 +294,7 @@ class FileLocker {
 
 			// Enforce max file size (use WordPress upload limit)
 			$wp_max_file_size = wp_max_upload_size();
-			$max_file_size = apply_filters( 'filelocker_max_file_size', $wp_max_file_size );
+			$max_file_size    = apply_filters( 'filelocker_max_file_size', $wp_max_file_size );
 			if ( $_FILES['fileLockerFile']['size'] > $max_file_size ) {
 				$max_size_mb = round( $max_file_size / ( 1024 * 1024 ), 1 );
 				$this->add_upload_error( "File too large. Maximum allowed size is {$max_size_mb}MB." );
@@ -296,10 +302,10 @@ class FileLocker {
 			}
 
 			$original_filename = basename( $_FILES['fileLockerFile']['name'] );
-			
+
 			// Sanitize filename using WordPress function
 			$sanitized_filename = sanitize_file_name( $original_filename );
-			
+
 			if ( empty( $sanitized_filename ) ) {
 				$this->add_upload_error( 'Invalid filename. Please rename your file and try again.' );
 				return;
@@ -307,7 +313,7 @@ class FileLocker {
 
 			// Validate file type and mime type
 			$file_type_check = wp_check_filetype_and_ext( $_FILES['fileLockerFile']['tmp_name'], $sanitized_filename );
-			
+
 			if ( ! $file_type_check['type'] || ! $file_type_check['ext'] ) {
 				$this->add_upload_error( 'File type not allowed. Please upload a valid file.' );
 				return;
@@ -324,21 +330,21 @@ class FileLocker {
 
 			// Handle duplicate filenames by adding a suffix
 			if ( file_exists( $target_file ) ) {
-				$pathinfo = pathinfo( $sanitized_filename );
-				$filename = $pathinfo['filename'];
+				$pathinfo  = pathinfo( $sanitized_filename );
+				$filename  = $pathinfo['filename'];
 				$extension = isset( $pathinfo['extension'] ) ? '.' . $pathinfo['extension'] : '';
-				$counter = 1;
+				$counter   = 1;
 
 				do {
 					$new_filename = $filename . '_' . $counter . $extension;
-					$target_file = $target_dir . '/' . $new_filename;
-					$counter++;
+					$target_file  = $target_dir . '/' . $new_filename;
+					++$counter;
 				} while ( file_exists( $target_file ) );
 			}
 
 			// Perform the file upload with proper error checking
 			$file_tmp = $_FILES['fileLockerFile']['tmp_name'];
-			
+
 			// Verify the temporary file exists and is readable
 			if ( ! is_uploaded_file( $file_tmp ) ) {
 				$this->add_upload_error( 'Invalid upload. Please try again.' );
@@ -358,7 +364,7 @@ class FileLocker {
 
 			// Log successful upload
 			error_log( 'FileLocker: Successfully uploaded file ' . basename( $target_file ) );
-			
+
 			// Add success message
 			$this->add_upload_success( 'File uploaded successfully: ' . basename( $target_file ) );
 		}
@@ -419,52 +425,75 @@ class FileLocker {
 
 	public function delete_filelocker_file( $filelocker_name = null ) {
 		if ( false === current_user_can( 'manage_options' ) ) {
-			return array( 'success' => false, 'error' => 'Insufficient permissions. Manage options capability required.' );
+			return array(
+				'success' => false,
+				'error'   => 'Insufficient permissions. Manage options capability required.',
+			);
 		}
 
 		// If no parameter provided, try to get from POST (new secure method) or fallback to GET (legacy)
-		if ( $filelocker_name === null ) {
+		if ( null === $filelocker_name ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verification handled in calling function
 			if ( isset( $_POST['filelocker_name'] ) ) {
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verification handled in calling function
 				$filelocker_name = $_POST['filelocker_name'];
 			} elseif ( isset( $_GET['filelocker_name'] ) ) {
 				$filelocker_name = $_GET['filelocker_name'];
 			} else {
-				return array( 'success' => false, 'error' => 'No file specified for deletion.' );
+				return array(
+					'success' => false,
+					'error'   => 'No file specified for deletion.',
+				);
 			}
 		}
 
 		// If the provided path appears to be relative, resolve it safely within the filelocker directory
 		if ( ! $this->is_absolute_path( $filelocker_name ) ) {
 			// Sanitize the relative path and prevent directory traversal
-			$relative_path = ltrim( str_replace( '\\', '/', $filelocker_name ), '/' );
-			$relative_path = preg_replace( '/\.\.\//', '', $relative_path ); // Remove any ../ patterns
+			$relative_path   = ltrim( str_replace( '\\', '/', $filelocker_name ), '/' );
+			$relative_path   = preg_replace( '/\.\.\//', '', $relative_path ); // Remove any ../ patterns
 			$filelocker_name = $this->filelocker_dir . '/' . $relative_path;
 		}
-		
+
 		if ( ! file_exists( $filelocker_name ) ) {
-			return array( 'success' => false, 'error' => 'File not found: ' . basename( $filelocker_name ) );
+			return array(
+				'success' => false,
+				'error'   => 'File not found: ' . basename( $filelocker_name ),
+			);
 		}
 
 		if ( ! $this->check_if_file_in_directory( $filelocker_name ) ) {
-			return array( 'success' => false, 'error' => 'File is not in the secure directory.' );
+			return array(
+				'success' => false,
+				'error'   => 'File is not in the secure directory.',
+			);
 		}
 
 		if ( ! is_writable( dirname( $filelocker_name ) ) ) {
-			return array( 'success' => false, 'error' => 'Directory is not writable. Check file permissions.' );
+			return array(
+				'success' => false,
+				'error'   => 'Directory is not writable. Check file permissions.',
+			);
 		}
 
 		if ( ! is_writable( $filelocker_name ) ) {
-			return array( 'success' => false, 'error' => 'File is not writable. Check file permissions.' );
+			return array(
+				'success' => false,
+				'error'   => 'File is not writable. Check file permissions.',
+			);
 		}
 
 		$result = unlink( $filelocker_name );
-		
+
 		if ( $result ) {
 			return array( 'success' => true );
 		} else {
-			$error = error_get_last();
+			$error         = error_get_last();
 			$error_message = $error ? $error['message'] : 'Unknown error occurred during file deletion.';
-			return array( 'success' => false, 'error' => $error_message );
+			return array(
+				'success' => false,
+				'error'   => $error_message,
+			);
 		}
 	}
 
@@ -490,5 +519,4 @@ class FileLocker {
 
 		return false;
 	}
-
 }
