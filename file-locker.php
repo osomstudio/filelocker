@@ -295,7 +295,7 @@ function filelocker_error_notice() {
 
 	if ( ! empty( $filelocker_errors ) ) {
 		foreach ( $filelocker_errors as $single_error ) {
-			echo '<div class="error"><p>' . esc_html( $single_error ) . '</p></div>';
+			echo '<div class="error"><p>' . wp_kses_post( $single_error ) . '</p></div>';
 		}
 	}
 }
