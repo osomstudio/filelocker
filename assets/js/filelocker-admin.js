@@ -6,47 +6,51 @@ document.addEventListener('DOMContentLoaded', function() {
 	const selectedFileName = document.getElementById('selectedFileName');
 	const browseButton = document.querySelector('.drop-zone-browse');
 
-	// Browse button click
-	browseButton.addEventListener('click', function() {
-		fileInput.click();
-	});
+	if (browseButton && dropZone && fileInput) {
+		// Browse button click
+		browseButton.addEventListener('click', function() {
+			fileInput.click();
+		});
 
-	// File input change
-	fileInput.addEventListener('change', function() {
-		handleFileSelection(this.files[0]);
-	});
+		// File input change
+		fileInput.addEventListener('change', function() {
+			handleFileSelection(this.files[0]);
+		});
 
-	// Drag and drop events
-	dropZone.addEventListener('dragover', function(e) {
-		e.preventDefault();
-		dropZone.classList.add('drag-over');
-	});
+		// Drag and drop events
+		dropZone.addEventListener('dragover', function(e) {
+			e.preventDefault();
+			dropZone.classList.add('drag-over');
+		});
 
-	dropZone.addEventListener('dragleave', function(e) {
-		e.preventDefault();
-		dropZone.classList.remove('drag-over');
-	});
+		dropZone.addEventListener('dragleave', function(e) {
+			e.preventDefault();
+			dropZone.classList.remove('drag-over');
+		});
 
-	dropZone.addEventListener('drop', function(e) {
-		e.preventDefault();
-		dropZone.classList.remove('drag-over');
-		
-		const files = e.dataTransfer.files;
-		if (files.length > 0) {
-			// Set the file to the input element
-			const dt = new DataTransfer();
-			dt.items.add(files[0]);
-			fileInput.files = dt.files;
+		dropZone.addEventListener('drop', function(e) {
+			e.preventDefault();
+			dropZone.classList.remove('drag-over');
 			
-			handleFileSelection(files[0]);
-		}
-	});
+			const files = e.dataTransfer.files;
+			if (files.length > 0) {
+				// Set the file to the input element
+				const dt = new DataTransfer();
+				dt.items.add(files[0]);
+				fileInput.files = dt.files;
+				
+				handleFileSelection(files[0]);
+			}
+		});
 
-	// Clear button
-	clearButton.addEventListener('click', function() {
-		fileInput.value = '';
-		handleFileSelection(null);
-	});
+		// Clear button
+		if (clearButton) {
+			clearButton.addEventListener('click', function() {
+				fileInput.value = '';
+				handleFileSelection(null);
+			});
+		}
+	}
 
 	function handleFileSelection(file) {
 		if (file) {

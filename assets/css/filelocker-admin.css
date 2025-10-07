@@ -186,3 +186,120 @@
 	outline: 2px solid #007cba;
 	outline-offset: 2px;
 }
+
+/* Settings Page Styles */
+.filelocker-settings-section {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 20px;
+	margin: 20px 0;
+	box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+
+.filelocker-settings-form {
+	max-width: 800px;
+}
+
+.filelocker-form-group {
+	margin-bottom: 20px;
+}
+
+.filelocker-label {
+	display: block;
+	margin-bottom: 8px;
+	font-weight: 600;
+	color: #1d2327;
+	font-size: 14px;
+}
+
+.filelocker-input {
+	width: 100%;
+	max-width: 600px;
+	padding: 8px 12px;
+	border: 1px solid #8c8f94;
+	border-radius: 4px;
+	font-size: 14px;
+	line-height: 1.5;
+	background-color: #fff;
+	transition: border-color 0.2s ease;
+}
+
+/* Hide native datalist arrow */
+.filelocker-input::-webkit-calendar-picker-indicator {
+	opacity: 0;
+	cursor: pointer;
+}
+
+.filelocker-input:hover,
+.filelocker-input:focus {
+	padding-right: 32px;
+	background-repeat: no-repeat;
+	background-position: right 10px center;
+	background-size: 12px 8px;
+}
+
+/* Show custom arrow on hover */
+.filelocker-input:hover {
+	border-color: #5a5a5a;
+	background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8"%3E%3Cpath fill="%235a5a5a" d="M1.41 0L6 4.58 10.59 0 12 1.42l-6 6-6-6z"/%3E%3C/svg%3E');
+}
+
+.filelocker-input:hover::-webkit-calendar-picker-indicator {
+	opacity: 0;
+}
+
+/* Show custom arrow on focus */
+.filelocker-input:focus {
+	border-color: #2271b1;
+	outline: none;
+	box-shadow: 0 0 0 1px #2271b1;
+	background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8"%3E%3Cpath fill="%232271b1" d="M1.41 0L6 4.58 10.59 0 12 1.42l-6 6-6-6z"/%3E%3C/svg%3E');
+}
+
+.filelocker-input:focus::-webkit-calendar-picker-indicator {
+	opacity: 0;
+}
+
+.filelocker-description {
+	margin: 8px 0 0 0;
+	color: #646970;
+	font-size: 13px;
+	font-style: italic;
+}
+
+.filelocker-actions {
+	margin-top: 20px;
+	padding-top: 15px;
+	border-top: 1px solid #dcdcde;
+}
+
+.filelocker-save-btn {
+	background: #2271b1;
+	border-color: #2271b1;
+	color: #fff;
+	text-decoration: none;
+	text-shadow: none;
+	padding: 6px 14px;
+	line-height: 2;
+	font-size: 13px;
+	border-radius: 3px;
+	cursor: pointer;
+	border-width: 1px;
+	border-style: solid;
+	transition: all 0.2s ease;
+}
+
+.filelocker-save-btn:hover {
+	background: #135e96;
+	border-color: #135e96;
+	color: #fff;
+}
+
+.filelocker-save-btn:focus {
+	background: #135e96;
+	border-color: #0a4b78;
+	color: #fff;
+	box-shadow: 0 0 0 1px #fff, 0 0 0 3px #2271b1;
+	outline: 2px solid transparent;
+}

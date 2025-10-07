@@ -107,7 +107,7 @@ class FileLocker {
 					exit;
 				} else {
 					if ( function_exists( 'filelocker_redirect' ) ) {
-						$redirect_url = filelocker_redirect();
+						$redirect_url = filelocker_redirect($filename);
 					} else {
 						$redirect_url = $this->home_url;
 					}
